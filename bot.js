@@ -22,25 +22,7 @@ This bot demonstrates a multi-stage conversation
 
 # USE THE BOT:
 
-  Find your bot inside Slack
-
-  Say: "pizzatime"
-
-  The bot will reply "What flavor of pizza do you want?"
-
-  Say what flavor you want.
-
-  The bot will reply "Awesome" "What size do you want?"
-
-  Say what size you want.
-
-  The bot will reply "Ok." "So where do you want it delivered?"
-
-  Say where you want it delivered.
-
-  The bot will reply "Ok! Good by."
-
-  ...and will refrain from billing your card because this is just a demo :P
+  tbd.
 
 # EXTEND THE BOT:
 
@@ -54,6 +36,17 @@ This bot demonstrates a multi-stage conversation
 
 var Botkit = require('./node_modules/botkit/lib/Botkit.js');
 
+var restaurants = [];
+var groups = [];
+
+// groups = [
+//   {
+//     restaurant: 'Chopsticks',
+//     users: ['@romans', '@dominike', '@carmen']
+//   }
+// ];
+
+
 if (!process.env.token) {
   console.log('Error: Specify token in environment');
   process.exit(1);
@@ -63,48 +56,131 @@ var controller = Botkit.slackbot({
   debug: true
 });
 
-controller.spawn({
+var bot = controller.spawn({
   token: process.env.token
-}).startRTM(function(err) {
+});
+
+bot.startRTM(function(err) {
   if (err) {
     throw new Error(err);
   }
 });
 
-controller.hears(['hi', 'hallo', 'hello', 'Pläne', 'Plan'],['direct_message'], function(bot, message) {
-  bot.api.users.info({ user: message.user },function(err,response) {
+bot.utterances = {
+  yes: new RegExp(/^(ja|jo|japp|si|jepp|jep|ok|y|yeah|yah)/i),
+  no: new RegExp(/^(nein|nö|ne|no|nah|nope|n)/i),
+};
+
+controller.hears(['hi', 'hallo', 'hey', 'help', 'hilfe'] ,['direct_message'], function(bot, message) {
+  fetchUser(message.user, function(err, response) {
     bot.reply(message, 'Hi, ' + response.user.profile.first_name + '!');
-    bot.startConversation(message, askFood);
-  })
+    bot.reply(message, 'Ich kann Dir dabei helfen, dich mit Deinen Kollegen zum Mittagessen zu verabreden.');
+    bot.reply(message, 'Du kannst `pläne` aufrufen, um die Essenspläne Deiner Kollegen zu sehen oder `hunger`, um Dich mit Ihnen zu verabreden.');
+  });
 });
 
-askFood = function(response, convo) {
-  // Show plans/groups
-  // User: Ich möchte mich x anschließen oder Ich gehe zu X
+controller.hears(['Plan', 'Pläne'] ,['direct_message'], function(bot, message) {
+  showGroups(bot, message);
+});
 
-  convo.ask("Wo möchtest Du essen gehen?", function(response, convo) {
-    convo.say("Cool, dann fahr da doch hin.");
-    convo.next();
+controller.hears(['hunger', 'kohldampf'] ,['direct_message'], function(bot, message) {
+  showGroups(bot, message);
+  bot.startConversation(message, askFood);
+});
+
+// Conversation elements
+
+askFood = function(response, convo) {
+  if (groups.length > 0) {
+    askToJoin(response, convo);
+  } else {
+    askForRestaurant(response, convo);
+  }
+}
+
+askToJoin = function(response, convo) {
+  convo.ask('Möchtest Du Dich irgendwo anschließen?', [{
+      pattern: bot.utterances.yes,
+      callback: function(response, convo) {
+        askForGroup(response, convo);
+        convo.next();
+      }
+    },
+    {
+      pattern: bot.utterances.no,
+      default: true,
+      callback: function(response, convo) {
+        askForRestaurant(response, convo);
+        convo.next();
+      }
+    }
+  ]);
+}
+
+askForGroup = function(response, convo) {
+  convo.ask('Wo möchtest Du Dich anschließen?', function(response, convo) {
+    fetchUser(response.user, function(err, fetchResponse) {
+      addUser(fetchResponse.user.name, response.text);
+      convo.say('Ich habe Dich zur Gruppe `' + response.text + '` hinzugefügt!');
+      convo.next();
+    });
   });
 }
 
-// askFlavor = function(response, convo) {
-//   convo.ask("What flavor of pizza do you want?", function(response, convo) {
-//     convo.say("Awesome.");
-//     askSize(response, convo);
-//     convo.next();
-//   });
-// }
-// askSize = function(response, convo) {
-//   convo.ask("What size do you want?", function(response, convo) {
-//     convo.say("Ok.")
-//     askWhereDeliver(response, convo);
-//     convo.next();
-//   });
-// }
-// askWhereDeliver = function(response, convo) {
-//   convo.ask("So where do you want it delivered?", function(response, convo) {
-//     convo.say("Ok! Good by.");
-//     convo.next();
-//   });
-// }
+askForRestaurant = function(response, convo) {
+  convo.ask('Wo möchtest Du denn essen?', function(response, convo) {
+    fetchUser(response.user, function(err, fetchResponse) {
+      addUser(fetchResponse.user.name, response.text);
+      convo.say('Ich habe Deinen Wunsch entgegen genommen!');
+      convo.next();
+    });
+  });
+}
+
+// Helpers
+
+addUser = function(user, restaurant) {
+  var group;
+  var found = false;
+  var userString = '@' + user;
+
+  for (var i = 0; i < groups.length && !found; i++) {
+    group = groups[i];
+    if (group.restaurant === restaurant) {
+      group.users.push(userString);
+      found = true;
+    }
+  }
+
+  if (!found) {
+    var newGroup = {
+      restaurant: restaurant,
+      users: [userString]
+    }
+    groups.push(newGroup);
+  }
+}
+
+fetchUser = function(id, callback) {
+  bot.api.users.info({ user: id }, callback);
+}
+
+printGroup = function(group) {
+  var groupString = '';
+  for (var i = 0; i < group.length; i++) {
+    groupString += group[i] + ' ';
+  }
+  return groupString;
+}
+
+showGroups = function (bot, message) {
+  if (groups.length > 0) {
+    bot.reply(message, "Es gibt folgende Pläne:");
+    for (var i = 0; i < groups.length; i++) {
+      var group = groups[i];
+      bot.reply(message, group.restaurant + ': ' + printGroup(group.users));
+    }
+  } else {
+    bot.reply(message, "Es gibt noch keine Pläne.");
+  }
+}

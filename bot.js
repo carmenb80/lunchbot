@@ -60,7 +60,7 @@ if (!process.env.token) {
 }
 
 var controller = Botkit.slackbot({
- debug: false
+  debug: true
 });
 
 controller.spawn({
@@ -71,27 +71,40 @@ controller.spawn({
   }
 });
 
-controller.hears(['pizzatime'],['ambient'],function(bot,message) {
-  bot.startConversation(message, askFlavor);
+controller.hears(['hi', 'hallo', 'hello', 'Pläne', 'Plan'],['direct_message'], function(bot, message) {
+  bot.api.users.info({ user: message.user },function(err,response) {
+    bot.reply(message, 'Hi, ' + response.user.profile.first_name + '!');
+    bot.startConversation(message, askFood);
+  })
 });
 
-askFlavor = function(response, convo) {
-  convo.ask("What flavor of pizza do you want?", function(response, convo) {
-    convo.say("Awesome.");
-    askSize(response, convo);
+askFood = function(response, convo) {
+  // Show plans/groups
+  // User: Ich möchte mich x anschließen oder Ich gehe zu X
+
+  convo.ask("Wo möchtest Du essen gehen?", function(response, convo) {
+    convo.say("Cool, dann fahr da doch hin.");
     convo.next();
   });
 }
-askSize = function(response, convo) {
-  convo.ask("What size do you want?", function(response, convo) {
-    convo.say("Ok.")
-    askWhereDeliver(response, convo);
-    convo.next();
-  });
-}
-askWhereDeliver = function(response, convo) {
-  convo.ask("So where do you want it delivered?", function(response, convo) {
-    convo.say("Ok! Good by.");
-    convo.next();
-  });
-}
+
+// askFlavor = function(response, convo) {
+//   convo.ask("What flavor of pizza do you want?", function(response, convo) {
+//     convo.say("Awesome.");
+//     askSize(response, convo);
+//     convo.next();
+//   });
+// }
+// askSize = function(response, convo) {
+//   convo.ask("What size do you want?", function(response, convo) {
+//     convo.say("Ok.")
+//     askWhereDeliver(response, convo);
+//     convo.next();
+//   });
+// }
+// askWhereDeliver = function(response, convo) {
+//   convo.ask("So where do you want it delivered?", function(response, convo) {
+//     convo.say("Ok! Good by.");
+//     convo.next();
+//   });
+// }
